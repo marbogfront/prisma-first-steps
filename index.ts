@@ -1,20 +1,30 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import { z } from "zod";
 
 const prisma = new PrismaClient();
 const app = express();
+
+const UserSchema = z.object({
+    name: z.string({
+            required_error: "Name is required",
+            invalid_type_error: "Name must be a string",
+        })
+        .min(2, {message: 'Name must be ate least 2 characters'}),
+    age: z.number({
+        required_error: "Age is required",
+        invalid_type_error: "Age must be a number",
+    })
+});
 
 async function server() {
     app.use(express.json());
 
     app.post('/user', async (req, res) => {
         try {
-            const body = req.body;
+            const validUserData = UserSchema.parse(req.body);
             const user = await prisma.user.create({
-                data: {
-                    name: body.name,
-                    age: body.age
-                }
+                data: validUserData
             });
             res.status(201).json(user);
         } catch(error) {
