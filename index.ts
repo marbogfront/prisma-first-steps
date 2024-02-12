@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { z } from "zod";
 
@@ -17,84 +17,147 @@ const UserSchema = z.object({
     })
 });
 
-async function server() {
-    app.use(express.json());
+const getUsers = async (_req: Request, res: Response) => {
+    const users = await prisma.user.findMany();
+    res.status(200).json(users);
+};
 
-    app.post('/user', async (req, res) => {
-        try {
-            const validUserData = UserSchema.parse(req.body);
-            const user = await prisma.user.create({
-                data: validUserData
-            });
-            res.status(201).json(user);
-        } catch(error) {
-            res.status(500).json(error);
+const createUser = async (req: Request, res: Response) => {
+    try {
+        const validUserData = UserSchema.parse(req.body);
+        const user = await prisma.user.create({
+            data: validUserData
+        });
+        res.status(201).json(user);
+    } catch(error) {
+        res.status(500).json(error);
+    }
+};
+
+const getUser = async (req: Request, res: Response) => {
+    const userId = req.params.userId;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: userId
         }
     });
 
-    app.get('/user', async (req, res) => {
-        const users = await prisma.user.findMany();
-        res.status(200).json(users);
-    });
-
-    app.get('/user/:userId', async (req, res) => {
-        const user = await prisma.user.findUnique({
-            where: {
-                id: req.params.userId
-            }
+    if(!user) {
+        return res.status(404).json({
+            status: 'error',
+            message: `User with id ${userId} not found.`
         });
-        res.status(200).json(user);
+    }
+
+    res.status(200).json(user);
+};
+
+const updateUser =  async (req: Request, res: Response) => {
+    const body = req.body;
+    const user = await prisma.user.update({
+        data: {
+            name: body.name
+        },
+        where: {
+            id: req.params.userId
+        }
+    });
+    res.status(200).json(user);
+};
+
+const deleteUser = async (req: Request, res: Response) => {
+    await prisma.user.delete({
+        where: {
+            id: req.params.userId
+        }
+    });
+    res.status(200).json({});
+};
+
+const getAllTasks = async (_req: Request, res: Response) => {
+    const tasks = await prisma.task.findMany();
+    res.status(200).json(tasks);
+};
+
+const createTask = async (req: Request, res: Response) => {
+    const body = req.body;
+    const task = await prisma.task.create({
+        data: {
+            description: body.description
+        }
+    });
+    res.status(200).json(task);
+};
+
+const getTask = async (req: Request, res: Response) => {
+    const taskId = req.params.taskId;
+
+    const task = await prisma.task.findUnique({
+        where: {
+            id: taskId
+        }
     });
 
-    app.put('/user/:userId', async (req, res) => {
-        const body = req.body;
-        const user = await prisma.user.update({
-            data: {
-                name: body.name
-            },
-            where: {
-                id: req.params.userId
-            }
+    if(!task) {
+        return res.status(404).json({
+            status: 'error',
+            message: `Task with id ${taskId} not found.`
         });
-        res.status(200).json(user);
+    }
+    
+    res.status(200).json(task);
+};
+
+const updateTask =  async (req: Request, res: Response) => {
+    const body = req.body;
+    const taskId = req.params.taskId;
+
+    const task = await prisma.task.update({
+        data: {
+            completed: body.completed
+        },
+        where: {
+            id: taskId
+        }
     });
 
-    app.delete('/user/:userId', async (req, res) => {
-        await prisma.user.delete({
-            where: {
-                id: req.params.userId
-            }
-        });
-        res.status(200).json({});
-    });
+    res.status(200).json(task);
+};
 
-    app.post('/task', async (req, res) => {
-        const body = req.body;
-        const task = await prisma.task.create({
-            data: {
-                description: body.description
-            }
-        });
-        res.status(200).json(task);
-    });
+async function server() {
+    app.use(express.json());
 
-    app.get('/task', async (req, res) => {
-        const tasks = await prisma.task.findMany();
-        res.status(200).json(tasks);
-    });
+    const userRouter = Router();
+    const taskRouter = Router();
 
-    app.put('/task/:taskId', async (req, res) => {
-        const body = req.body;
-        const task = await prisma.task.update({
-            data: {
-                completed: body.completed
-            },
-            where: {
-                id: req.params.taskId
-            }
-        });
-        res.status(200).json(task);
-    });
+    app.use('/app/v1/user', userRouter);
+    app.use('/app/v1/task', taskRouter);
+
+    app.use((req, res, next) => {
+        console.log('middleware own');
+        next();
+    });  
+
+    userRouter
+        .route('/')
+        .get(getUsers)
+        .post(createUser);  
+
+    userRouter
+        .route('/:userId')
+        .get(getUser)
+        .put(updateUser)
+        .delete(deleteUser);
+
+    taskRouter
+        .route('/')
+        .get(getAllTasks)
+        .post(createTask);
+
+    taskRouter
+        .route('/:taskId')
+        .get(getTask)
+        .patch(updateTask);
 
     app.listen(3001, () => {
         console.log('Server is running');
